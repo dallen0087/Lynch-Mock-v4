@@ -57,6 +57,7 @@ GARMENTS_ALL: Dict[str, Dict[str, object]] = {
         "asset_dir": "TSHIRT_1",
         "guide_dir": "TSHIRT_1",
         "display_name": "Model T1",
+        "allow_rotation": True,
     },
     "model_t2": {
         "preview": "WHITE",
@@ -65,6 +66,7 @@ GARMENTS_ALL: Dict[str, Dict[str, object]] = {
         "asset_dir": "TSHIRT_2",
         "guide_dir": "TSHIRT_2",
         "display_name": "Model T2",
+        "allow_rotation": True,
     },
     "model_h1": {
         "preview": "BLACK",
@@ -73,6 +75,7 @@ GARMENTS_ALL: Dict[str, Dict[str, object]] = {
         "asset_dir": "HOODIE_1",
         "guide_dir": "HOODIE_1",
         "display_name": "Model H1",
+        "allow_rotation": True,
     },
     "model_h2": {
         "preview": "BLACK",
@@ -81,6 +84,7 @@ GARMENTS_ALL: Dict[str, Dict[str, object]] = {
         "asset_dir": "HOODIE_2",
         "guide_dir": "HOODIE_2",
         "display_name": "Model H2",
+        "allow_rotation": True,
     },
     "model_ss1": {
         "preview": "BABY_BLUE",
@@ -89,6 +93,7 @@ GARMENTS_ALL: Dict[str, Dict[str, object]] = {
         "asset_dir": "SWEATSHIRT_1",
         "guide_dir": "SWEATSHIRT_1",
         "display_name": "Model SS1",
+        "allow_rotation": True,
     },
     "model_ss2": {
         "preview": "BLACK",
@@ -97,6 +102,7 @@ GARMENTS_ALL: Dict[str, Dict[str, object]] = {
         "asset_dir": "SWEATSHIRT_2",
         "guide_dir": "SWEATSHIRT_2",
         "display_name": "Model SS2",
+        "allow_rotation": True,
     },
 }
 
@@ -152,8 +158,17 @@ def render_preview(cropped, guide_img, shirt_img, settings, color_mode, dark_col
         fill = Image.new("RGBA", resized.size, hex_map[color_mode])
         fill.putalpha(resized_alpha)
 
-    px = box_x0 + (box_w - new_w) // 2
-    py = box_y0 + (box_h - new_h) // 2 + settings["offset"]
+    angle = settings.get("rotation", 0)
+    offset = settings.get("offset", 0)
+    if angle:
+        center_x = box_x0 + box_w / 2
+        center_y = box_y0 + box_h / 2 + offset
+        fill = fill.rotate(angle, resample=Image.Resampling.BICUBIC, expand=True)
+        px = int(round(center_x - fill.width / 2))
+        py = int(round(center_y - fill.height / 2))
+    else:
+        px = box_x0 + (box_w - fill.width) // 2
+        py = box_y0 + (box_h - fill.height) // 2 + offset
     composed = shirt_img.copy()
     composed.paste(fill, (px, py), fill)
     return composed.convert("RGB")
@@ -260,8 +275,11 @@ def run_app(title: str, garments: Dict[str, Dict[str, object]]):
                             "offset": 0,
                             "guide": "STANDARD",
                             "preview": config["preview"],
+                            "rotation": 0,
                         }
                     current_settings = st.session_state.settings[combo_key]
+                    if "rotation" not in current_settings:
+                        current_settings["rotation"] = 0
                     if combo_key not in st.session_state.buffer_ui:
                         st.session_state.buffer_ui[combo_key] = current_settings.copy()
                     if combo_key not in st.session_state.has_rendered_once:
@@ -274,12 +292,22 @@ def run_app(title: str, garments: Dict[str, Dict[str, object]]):
                         st.session_state.has_rendered_once[combo_key] = True
 
                     buf = st.session_state.buffer_ui[combo_key]
+                    if "rotation" not in buf:
+                        buf["rotation"] = current_settings.get("rotation", 0)
                     with st.expander(f"{display_name} Settings for `{design_name}`", expanded=False):
                         guide_folder = os.path.join("assets", "guides", guide_dir)
                         guides = sorted([f.split(".")[0] for f in os.listdir(guide_folder) if f.endswith(".png")])
                         buf["guide"] = st.selectbox("Guide", guides, index=guides.index(buf["guide"]), key=f"{combo_key}_guide")
                         buf["scale"] = st.slider("Scale (%)", 50, 100, buf["scale"], key=f"{combo_key}_scale")
                         buf["offset"] = st.slider("Offset (px)", -100, 100, buf["offset"], key=f"{combo_key}_offset")
+                        if config.get("allow_rotation"):
+                            buf["rotation"] = st.slider(
+                                "Rotation (°)",
+                                -30,
+                                30,
+                                buf["rotation"],
+                                key=f"{combo_key}_rotation",
+                            )
 
                         col1, col2 = st.columns(2)
                         with col1:
@@ -292,6 +320,8 @@ def run_app(title: str, garments: Dict[str, Dict[str, object]]):
                                     st.warning("Copy settings before pasting to other designs.")
                                 else:
                                     copied_values = st.session_state.copied_settings[garment]
+                                    if "rotation" not in copied_values:
+                                        copied_values["rotation"] = 0
                                     for uf2 in uploaded_files:
                                         other_key = f"{os.path.splitext(os.path.basename(uf2.name))[0]}_{garment}"
                                         st.session_state.buffer_ui[other_key] = copied_values.copy()
@@ -321,7 +351,12 @@ def run_app(title: str, garments: Dict[str, Dict[str, object]]):
             for combo_key, buf in st.session_state.buffer_ui.items():
                 if combo_key not in st.session_state.settings:
                     continue
-                if buf != st.session_state.settings[combo_key]:
+                settings_snapshot = st.session_state.settings[combo_key]
+                if "rotation" not in buf:
+                    buf["rotation"] = settings_snapshot.get("rotation", 0)
+                if "rotation" not in settings_snapshot:
+                    settings_snapshot["rotation"] = buf["rotation"]
+                if buf != settings_snapshot:
                     design_name, garment = combo_key.rsplit("_", 1)
                     config = garments.get(garment)
                     if config is None:
@@ -371,10 +406,18 @@ def run_app(title: str, garments: Dict[str, Dict[str, object]]):
 
                     for garment, config in garments.items():
                         combo_key = f"{design_name}_{garment}"
-                        base_settings = st.session_state.settings.get(
-                            combo_key,
-                            {"scale": 100, "offset": 0, "guide": "STANDARD", "preview": config["preview"]},
-                        )
+                        base_settings = st.session_state.settings.get(combo_key)
+                        if base_settings is None:
+                            base_settings = {
+                                "scale": 100,
+                                "offset": 0,
+                                "guide": "STANDARD",
+                                "preview": config["preview"],
+                                "rotation": 0,
+                            }
+                        else:
+                            if "rotation" not in base_settings:
+                                base_settings["rotation"] = 0
                         settings = base_settings.copy()
                         guide_name = settings.get("guide", "STANDARD")
                         asset_dir = config.get("asset_dir", garment)
