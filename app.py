@@ -6,7 +6,7 @@ import io
 import os
 
 st.set_page_config(layout="wide")
-st.title("🟢THE_SHIRT_MATRIX v4🟢")
+st.title("🟢THE_SHIRT_MATRIX v4 0w0🟢")
 
 garments = {
     "tshirts": {
