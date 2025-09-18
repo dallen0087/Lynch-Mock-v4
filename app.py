@@ -1,5 +1,5 @@
 import streamlit as st
-from PIL import Image
+from PIL import Image, UnidentifiedImageError
 import numpy as np
 import zipfile
 import io
@@ -114,6 +114,8 @@ if "copied_settings" not in st.session_state:
     st.session_state.copied_settings = {}
 if "has_rendered_once" not in st.session_state:
     st.session_state.has_rendered_once = {}
+if "design_cache" not in st.session_state:
+    st.session_state.design_cache = {}
 
 PREVIEW_DISPLAY_SIZE = (600, 600)
 PREVIEW_IMAGE_FORMAT = "JPEG"
@@ -179,23 +181,55 @@ def preview_to_bytes(image: Image.Image) -> bytes:
     return buffer.getvalue()
 
 
+def open_design_from_bytes(data: bytes) -> Image.Image | None:
+    if not data:
+        return None
+    try:
+        return Image.open(io.BytesIO(data)).convert("RGBA")
+    except (UnidentifiedImageError, OSError, ValueError):
+        return None
+
+
+def load_cached_design(design_name: str) -> Image.Image | None:
+    data = st.session_state.design_cache.get(design_name)
+    if data is None:
+        design_path = os.path.join("temp_designs", f"{design_name}.png")
+        if os.path.exists(design_path):
+            with open(design_path, "rb") as f:
+                data = f.read()
+            st.session_state.design_cache[design_name] = data
+    if data is None:
+        return None
+    return open_design_from_bytes(data)
+
+
 if uploaded_files:
     if not os.path.exists("temp_designs"):
         os.makedirs("temp_designs")
 
-    tabs = st.tabs([f"{uf.name.split('.')[0]}" for uf in uploaded_files])
+    tabs = st.tabs([os.path.splitext(os.path.basename(uf.name))[0] for uf in uploaded_files])
     refresh_queue = []
+    active_designs = set()
 
     for tab, uploaded_file in zip(tabs, uploaded_files):
         with tab:
-            design_name = uploaded_file.name.split(".")[0]
+            design_name = os.path.splitext(os.path.basename(uploaded_file.name))[0]
+            design_bytes = uploaded_file.getvalue()
+            design = open_design_from_bytes(design_bytes)
+            if design is None:
+                st.error(f"Unable to read the uploaded design '{uploaded_file.name}'. Please re-upload a valid PNG.")
+                continue
+            st.session_state.design_cache[design_name] = design_bytes
             design_path = f"temp_designs/{design_name}.png"
             with open(design_path, "wb") as f:
-                f.write(uploaded_file.getvalue())
-            design = Image.open(design_path).convert("RGBA")
+                f.write(design_bytes)
             alpha = design.split()[-1]
             bbox = alpha.getbbox()
+            if bbox is None:
+                st.warning(f"Design '{uploaded_file.name}' has no visible content and will be skipped.")
+                continue
             cropped = design.crop(bbox)
+            active_designs.add(design_name)
 
             st.markdown(f"### Design: `{design_name}`")
             cols = st.columns(len(garments))
@@ -280,10 +314,17 @@ if uploaded_files:
                     continue
                 asset_dir = config.get("asset_dir", garment)
                 guide_dir = config.get("guide_dir", asset_dir)
-                design_path = f"temp_designs/{design_name}.png"
-                design = Image.open(design_path).convert("RGBA")
+                design = load_cached_design(design_name)
+                if design is None:
+                    st.warning(
+                        f"Design '{design_name}' could not be reloaded for refresh. Please re-upload the file if needed."
+                    )
+                    continue
                 alpha = design.split()[-1]
                 bbox = alpha.getbbox()
+                if bbox is None:
+                    st.warning(f"Design '{design_name}' has no visible content and was skipped during refresh.")
+                    continue
                 cropped = design.crop(bbox)
                 guide_img = load_guide_image(guide_dir, buf["guide"])
                 preview_color = buf.get("preview", config["preview"])
@@ -300,11 +341,18 @@ if uploaded_files:
         output_zip = io.BytesIO()
         with zipfile.ZipFile(output_zip, "w") as zip_buffer:
             for uploaded_file in uploaded_files:
-                design_name = uploaded_file.name.split(".")[0]
-                design_path = f"temp_designs/{design_name}.png"
-                design = Image.open(design_path).convert("RGBA")
+                design_name = os.path.splitext(os.path.basename(uploaded_file.name))[0]
+                design = load_cached_design(design_name)
+                if design is None:
+                    st.warning(
+                        f"Skipping '{uploaded_file.name}' because the image data could not be reloaded for export."
+                    )
+                    continue
                 alpha = design.split()[-1]
                 bbox = alpha.getbbox()
+                if bbox is None:
+                    st.warning(f"Skipping '{uploaded_file.name}' because it has no visible content to render.")
+                    continue
                 cropped = design.crop(bbox)
 
                 for garment, config in garments.items():
@@ -346,3 +394,6 @@ if uploaded_files:
             file_name="mockups.zip",
             mime="application/zip",
         )
+    stale_designs = set(st.session_state.design_cache.keys()) - active_designs
+    for stale in stale_designs:
+        st.session_state.design_cache.pop(stale, None)
