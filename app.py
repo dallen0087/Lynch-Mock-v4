@@ -233,17 +233,21 @@ if uploaded_files:
                     buf["scale"] = st.slider("Scale (%)", 50, 100, buf["scale"], key=f"{combo_key}_scale")
                     buf["offset"] = st.slider("Offset (px)", -100, 100, buf["offset"], key=f"{combo_key}_offset")
 
-                    col1, col2 = st.columns(2")
+                    col1, col2 = st.columns(2)
                     with col1:
                         if st.button(f"📋 Copy {display_name} Settings", key=f"{combo_key}_copy"):
                             st.session_state.copied_settings[garment] = buf.copy()
                             st.success("Copied settings")
                     with col2:
                         if st.button(f"📥 Paste to All {display_name}", key=f"{combo_key}_paste"):
-                            for uf2 in uploaded_files:
-                                other_key = f"{uf2.name.split('.')[0]}_{garment}"
-                                st.session_state.buffer_ui[other_key] = st.session_state.copied_settings[garment].copy()
-                            st.success("Pasted settings")
+                            if garment not in st.session_state.copied_settings:
+                                st.warning("Copy settings before pasting to other designs.")
+                            else:
+                                copied_values = st.session_state.copied_settings[garment]
+                                for uf2 in uploaded_files:
+                                    other_key = f"{uf2.name.split('.')[0]}_{garment}"
+                                    st.session_state.buffer_ui[other_key] = copied_values.copy()
+                                st.success("Pasted settings")
 
                     if st.button(f"🔁 Refresh {display_name} Preview", key=f"{combo_key}_refresh"):
                         st.session_state.settings[combo_key] = buf.copy()
@@ -319,7 +323,7 @@ if uploaded_files:
                     guide_img = load_guide_image(guide_dir, guide_name)
 
                     for color in config["colors"]:
-                        shirt_path = os.path.join("assets", asset_dir, f"{color}.jpg}")
+                        shirt_path = os.path.join("assets", asset_dir, f"{color}.jpg")
                         if not os.path.exists(shirt_path):
                             continue
 
