@@ -336,7 +336,7 @@ if uploaded_files:
                 st.session_state.settings[combo_key] = buf.copy()
         st.success("All adjusted previews refreshed.")
 
-        st.markdown("## 📦 Export All Mockups")
+    st.markdown("## 📦 Export All Mockups")
     if st.button("📁 Generate and Download ZIP"):
         output_zip = io.BytesIO()
         with zipfile.ZipFile(output_zip, "w") as zip_buffer:
@@ -355,37 +355,38 @@ if uploaded_files:
                     continue
                 cropped = design.crop(bbox)
 
-                for garment, config in garments.items():
-                    combo_key = f"{design_name}_{garment}"
-                    base_settings = st.session_state.settings.get(
-                        combo_key,
-                        {"scale": 100, "offset": 0, "guide": "STANDARD", "preview": config["preview"]},
-                    )
-                    settings = base_settings.copy()
-                    guide_name = settings.get("guide", "STANDARD")
-                    asset_dir = config.get("asset_dir", garment)
-                    guide_dir = config.get("guide_dir", asset_dir)
-                    guide_path = os.path.join("assets", "guides", guide_dir, f"{guide_name}.png")
-                    if not os.path.exists(guide_path):
-                        continue
-                    guide_img = load_guide_image(guide_dir, guide_name)
-
-                    for color in config["colors"]:
-                        shirt_path = os.path.join("assets", asset_dir, f"{color}.jpg")
-                        if not os.path.exists(shirt_path):
-                            continue
-
-                        shirt_img = load_shirt_image(asset_dir, color)
-                        color_settings = settings.copy()
-                        color_settings["preview"] = color
-                        composed = render_preview(
-                            cropped, guide_img, shirt_img, color_settings, color_mode, config["dark_colors"], color_hex_map
+                if garments:
+                    for garment, config in garments.items():
+                        combo_key = f"{design_name}_{garment}"
+                        base_settings = st.session_state.settings.get(
+                            combo_key,
+                            {"scale": 100, "offset": 0, "guide": "STANDARD", "preview": config["preview"]},
                         )
+                        settings = base_settings.copy()
+                        guide_name = settings.get("guide", "STANDARD")
+                        asset_dir = config.get("asset_dir", garment)
+                        guide_dir = config.get("guide_dir", asset_dir)
+                        guide_path = os.path.join("assets", "guides", guide_dir, f"{guide_name}.png")
+                        if not os.path.exists(guide_path):
+                            continue
+                        guide_img = load_guide_image(guide_dir, guide_name)
 
-                        filename = f"{design_name}_{garment}_{color}.jpg"
-                        img_bytes = io.BytesIO()
-                        composed.save(img_bytes, format="JPEG")
-                        zip_buffer.writestr(filename, img_bytes.getvalue())
+                        for color in config["colors"]:
+                            shirt_path = os.path.join("assets", asset_dir, f"{color}.jpg")
+                            if not os.path.exists(shirt_path):
+                                continue
+
+                            shirt_img = load_shirt_image(asset_dir, color)
+                            color_settings = settings.copy()
+                            color_settings["preview"] = color
+                            composed = render_preview(
+                                cropped, guide_img, shirt_img, color_settings, color_mode, config["dark_colors"], color_hex_map
+                            )
+
+                            filename = f"{design_name}_{garment}_{color}.jpg"
+                            img_bytes = io.BytesIO()
+                            composed.save(img_bytes, format="JPEG")
+                            zip_buffer.writestr(filename, img_bytes.getvalue())
 
         output_zip.seek(0)
         st.download_button(
