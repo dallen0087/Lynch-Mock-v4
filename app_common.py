@@ -166,6 +166,21 @@ def render_preview(cropped, guide_img, shirt_img, settings, color_mode, dark_col
         fill = Image.new("RGBA", resized.size, hex_map[color_mode])
         fill.putalpha(resized_alpha)
 
+    opacity_value = settings.get("opacity", 95)
+    try:
+        opacity_value = float(opacity_value)
+    except (TypeError, ValueError):
+        opacity_value = 95.0
+    if opacity_value < 0:
+        opacity_value = 0.0
+    elif opacity_value > 100:
+        opacity_value = 100.0
+    if opacity_value != 100.0:
+        alpha_scale = opacity_value / 100.0
+        fill_alpha = np.array(fill.split()[-1], dtype=np.float32)
+        fill_alpha = np.clip(fill_alpha * alpha_scale, 0, 255).astype(np.uint8)
+        fill.putalpha(Image.fromarray(fill_alpha, mode="L"))
+
     angle = settings.get("rotation", 0)
     offset = settings.get("offset", 0)
     if angle:
@@ -316,12 +331,15 @@ def run_app(title: str, garments: Dict[str, Dict[str, object]]):
                             "guide": "STANDARD",
                             "preview": config["preview"],
                             "rotation": 0,
+                            "opacity": 95,
                             "color_mode": design_color_mode,
                         }
                     current_settings = st.session_state.settings[combo_key]
                     current_settings["color_mode"] = design_color_mode
                     if "rotation" not in current_settings:
                         current_settings["rotation"] = 0
+                    if "opacity" not in current_settings:
+                        current_settings["opacity"] = 95
                     if combo_key not in st.session_state.buffer_ui:
                         st.session_state.buffer_ui[combo_key] = current_settings.copy()
                     if combo_key not in st.session_state.has_rendered_once:
@@ -343,12 +361,27 @@ def run_app(title: str, garments: Dict[str, Dict[str, object]]):
                     buf["color_mode"] = design_color_mode
                     if "rotation" not in buf:
                         buf["rotation"] = current_settings.get("rotation", 0)
+                    if "opacity" not in buf:
+                        buf["opacity"] = current_settings.get("opacity", 95)
                     with st.expander(f"{display_name} Settings for `{design_name}`", expanded=False):
                         guide_folder = os.path.join("assets", "guides", guide_dir)
                         guides = sorted([f.split(".")[0] for f in os.listdir(guide_folder) if f.endswith(".png")])
                         buf["guide"] = st.selectbox("Guide", guides, index=guides.index(buf["guide"]), key=f"{combo_key}_guide")
                         buf["scale"] = st.slider("Scale (%)", 50, 100, buf["scale"], key=f"{combo_key}_scale")
                         buf["offset"] = st.slider("Offset (px)", -100, 100, buf["offset"], key=f"{combo_key}_offset")
+                        opacity_default = buf.get("opacity", 95)
+                        try:
+                            opacity_default = int(round(float(opacity_default)))
+                        except (TypeError, ValueError):
+                            opacity_default = 95
+                        opacity_default = max(0, min(100, opacity_default))
+                        buf["opacity"] = st.slider(
+                            "Opacity (%)",
+                            0,
+                            100,
+                            opacity_default,
+                            key=f"{combo_key}_opacity",
+                        )
                         if config.get("allow_rotation"):
                             rotation_value = float(buf.get("rotation", 0))
                             if rotation_value < -10:
@@ -377,6 +410,8 @@ def run_app(title: str, garments: Dict[str, Dict[str, object]]):
                                     copied_values = st.session_state.copied_settings[garment]
                                     if "rotation" not in copied_values:
                                         copied_values["rotation"] = 0
+                                    if "opacity" not in copied_values:
+                                        copied_values["opacity"] = buf.get("opacity", 95)
                                     copied_color_mode = copied_values.get("color_mode", design_color_mode)
                                     if copied_color_mode not in COLOR_MODE_OPTIONS:
                                         copied_color_mode = design_color_mode
@@ -424,6 +459,10 @@ def run_app(title: str, garments: Dict[str, Dict[str, object]]):
                     buf["rotation"] = settings_snapshot.get("rotation", 0)
                 if "rotation" not in settings_snapshot:
                     settings_snapshot["rotation"] = buf["rotation"]
+                if "opacity" not in buf:
+                    buf["opacity"] = settings_snapshot.get("opacity", 95)
+                if "opacity" not in settings_snapshot:
+                    settings_snapshot["opacity"] = buf["opacity"]
                 design_name, garment = combo_key.rsplit("_", 1)
                 design_color_mode = st.session_state.color_mode.get(design_name, COLOR_MODE_OPTIONS[0])
                 if design_color_mode not in COLOR_MODE_OPTIONS:
@@ -500,11 +539,14 @@ def run_app(title: str, garments: Dict[str, Dict[str, object]]):
                                 "guide": "STANDARD",
                                 "preview": config["preview"],
                                 "rotation": 0,
+                                "opacity": 95,
                                 "color_mode": fallback_color_mode,
                             }
                         else:
                             if "rotation" not in base_settings:
                                 base_settings["rotation"] = 0
+                            if "opacity" not in base_settings:
+                                base_settings["opacity"] = 95
                             if (
                                 "color_mode" not in base_settings
                                 or base_settings["color_mode"] not in COLOR_MODE_OPTIONS
