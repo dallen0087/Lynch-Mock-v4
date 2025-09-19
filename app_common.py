@@ -206,7 +206,7 @@ def render_preview(cropped, guide_img, shirt_img, settings, color_mode, dark_col
         fill_alpha = np.clip(fill_alpha * alpha_scale, 0, 255).astype(np.uint8)
         fill.putalpha(Image.fromarray(fill_alpha, mode="L"))
 
-    angle = settings.get("rotation", 0")
+    angle = settings.get("rotation", 0)
     offset = settings.get("offset", 0)
     if angle:
         center_x = box_x0 + box_w / 2
@@ -520,100 +520,121 @@ def run_app(title: str, garments: Dict[str, Dict[str, object]]):
                     buf_color_mode = design_color_mode
                 buf["color_mode"] = buf_color_mode
                 st.session_state.color_mode[design_name] = buf_color_mode
-
-                guide_dir = garments[garment].get("guide_dir", garments[garment].get("asset_dir", garment))
-                asset_dir = garments[garment].get("asset_dir", garment)
-                guide_name = buf.get("guide", "STANDARD")
-                if not guide_name:
-                    guide_name = "STANDARD"
-                guide_path = os.path.join("assets", "guides", guide_dir, f"{guide_name}.png")
-                if not os.path.exists(guide_path):
-                    st.warning(f"Guide {guide_name} for {garment} does not exist.")
-                    continue
-                guide_img = load_guide_image(guide_dir, guide_name)
-                preview_color = buf.get("preview", garments[garment]["preview"])
-                shirt_path = os.path.join("assets", asset_dir, f"{preview_color}.jpg")
-                if not os.path.exists(shirt_path):
-                    st.warning(f"Preview color {preview_color} for {garment} does not exist.")
-                    continue
-                shirt_img = load_shirt_image(asset_dir, preview_color)
-                preview_image = render_preview(
-                    cropped,
-                    guide_img,
-                    shirt_img,
-                    buf,
-                    buf_color_mode,
-                    garments[garment]["dark_colors"],
-                    color_hex_map,
-                )
-                st.session_state.previews[combo_key] = preview_to_bytes(preview_image)
-
-    else:
-        st.info("Upload PNG files to start creating mockups.")
-
-    st.markdown("## 📦 Download All Mockups")
-    if st.button("⬇️ Prepare Download ZIP"):
-        if not st.session_state.previews:
-            st.warning("There are no previews to download. Adjust settings and refresh previews first.")
-        else:
-            output_zip = io.BytesIO()
-            with zipfile.ZipFile(output_zip, "w") as zip_buffer:
-                for combo_key, preview_data in st.session_state.previews.items():
-                    design_name, garment = combo_key.rsplit("_", 1)
-                    config = garments.get(garment, {})
-                    design = load_cached_design(design_name)
-                    if design is None:
+                if buf != settings_snapshot:
+                    config = garments.get(garment)
+                    if config is None:
                         continue
-                    active_settings = st.session_state.settings.get(combo_key, {})
-                    cropped = design.crop(design.split()[-1].getbbox())
-                    base_settings = active_settings.copy()
-                    if "scale" not in base_settings:
-                        base_settings["scale"] = 100
-                    if "offset" not in base_settings:
-                        base_settings["offset"] = 0
-                    fallback_color_mode = COLOR_MODE_OPTIONS[0]
-                    if design_name in st.session_state.color_mode:
-                        stored_mode = st.session_state.color_mode[design_name]
-                        if stored_mode in COLOR_MODE_OPTIONS:
-                            fallback_color_mode = stored_mode
-                    if "color_mode" not in base_settings or base_settings["color_mode"] not in COLOR_MODE_OPTIONS:
-                        base_settings["color_mode"] = fallback_color_mode
-
-                    settings = base_settings.copy()
-                    settings["color_mode"] = fallback_color_mode
-                    guide_name = settings.get("guide", "STANDARD")
                     asset_dir = config.get("asset_dir", garment)
                     guide_dir = config.get("guide_dir", asset_dir)
-                    guide_path = os.path.join("assets", "guides", guide_dir, f"{guide_name}.png")
-                    if not os.path.exists(guide_path):
-                        continue
-                    guide_img = load_guide_image(guide_dir, guide_name)
-
-                    for color in config["colors"]:
-                        shirt_path = os.path.join("assets", asset_dir, f"{color}.jpg")
-                        if not os.path.exists(shirt_path):
-                            continue
-
-                        shirt_img = load_shirt_image(asset_dir, color)
-                        color_settings = settings.copy()
-                        color_settings["preview"] = color
-                        color_mode_to_apply = color_settings.get("color_mode", fallback_color_mode)
-                        if color_mode_to_apply not in COLOR_MODE_OPTIONS:
-                            color_mode_to_apply = fallback_color_mode
-                        composed = render_preview(
-                            cropped,
-                            guide_img,
-                            shirt_img,
-                            color_settings,
-                            color_mode_to_apply,
-                            config["dark_colors"],
-                            color_hex_map,
+                    design = load_cached_design(design_name)
+                    if design is None:
+                        st.warning(
+                            f"Design '{design_name}' could not be reloaded for refresh. Please re-upload the file if needed."
                         )
+                        continue
+                    alpha = design.split()[-1]
+                    bbox = alpha.getbbox()
+                    if bbox is None:
+                        st.warning(f"Design '{design_name}' has no visible content and was skipped during refresh.")
+                        continue
+                    cropped = design.crop(bbox)
+                    guide_img = load_guide_image(guide_dir, buf["guide"])
+                    preview_color = buf.get("preview", config["preview"])
+                    shirt_img = load_shirt_image(asset_dir, preview_color)
+                    preview_image = render_preview(
+                        cropped,
+                        guide_img,
+                        shirt_img,
+                        buf,
+                        buf_color_mode,
+                        config["dark_colors"],
+                        color_hex_map,
+                    )
+                    st.session_state.previews[combo_key] = preview_to_bytes(preview_image)
+                    st.session_state.settings[combo_key] = sanitize_settings_payload(buf)
+            st.success("All adjusted previews refreshed.")
 
-                        filename = f"{design_name}_{garment}_{color}.jpg"
-                        img_bytes = io.BytesIO()
-                        composed.save(img_bytes, format="JPEG")
-                        zip_buffer.writestr(filename, img_bytes.getvalue())
+        st.markdown("## 📦 Export All Mockups")
+        if st.button("📁 Generate and Download ZIP"):
+            output_zip = io.BytesIO()
+            with zipfile.ZipFile(output_zip, "w") as zip_buffer():
+                for uploaded_file in uploaded_files:
+                    design_name = os.path.splitext(os.path.basename(uploaded_file.name))[0]
+                    design = load_cached_design(design_name)
+                    if design is None:
+                        st.warning(
+                            f"Skipping '{uploaded_file.name}' because the image data could not be reloaded for export."
+                        )
+                        continue
+                    alpha = design.split()[-1]
+                    bbox = alpha.getbbox()
+                    if bbox is None:
+                        st.warning(f"Skipping '{uploaded_file.name}' because it has no visible content to render.")
+                        continue
+                    cropped = design.crop(bbox)
+                    fallback_color_mode = st.session_state.color_mode.get(design_name, COLOR_MODE_OPTIONS[0])
+                    if fallback_color_mode not in COLOR_MODE_OPTIONS:
+                        fallback_color_mode = COLOR_MODE_OPTIONS[0]
+                        st.session_state.color_mode[design_name] = fallback_color_mode
+
+                    for garment, config in garments.items():
+                        combo_key = f"{design_name}_{garment}"
+                        base_settings = st.session_state.settings.get(combo_key)
+                        if base_settings is None:
+                            base_settings = {
+                                "scale": 100,
+                                "offset": 0,
+                                "guide": "STANDARD",
+                                "preview": config["preview"],
+                                "rotation": 0,
+                                "opacity": 95,
+                                "color_mode": fallback_color_mode,
+                            }
+                        else:
+                            if "rotation" not in base_settings:
+                                base_settings["rotation"] = 0
+                            if "opacity" not in base_settings:
+                                base_settings["opacity"] = 95
+                            if (
+                                "color_mode" not in base_settings
+                                or base_settings["color_mode"] not in COLOR_MODE_OPTIONS
+                            ):
+                                base_settings["color_mode"] = fallback_color_mode
+                        settings = base_settings.copy()
+                        settings["color_mode"] = fallback_color_mode
+                        guide_name = settings.get("guide", "STANDARD")
+                        asset_dir = config.get("asset_dir", garment)
+                        guide_dir = config.get("guide_dir", asset_dir)
+                        guide_path = os.path.join("assets", "guides", guide_dir, f"{guide_name}.png")
+                        if not os.path.exists(guide_path):
+                            continue
+                        guide_img = load_guide_image(guide_dir, guide_name)
+
+                        for color in config["colors"]:
+                            shirt_path = os.path.join("assets", asset_dir, f"{color}.jpg")
+                            if not os.path.exists(shirt_path):
+                                continue
+
+                            shirt_img = load_shirt_image(asset_dir, color)
+                            color_settings = settings.copy()
+                            color_settings["preview"] = color
+                            color_mode_to_apply = color_settings.get("color_mode", fallback_color_mode)
+                            if color_mode_to_apply not in COLOR_MODE_OPTIONS:
+                                color_mode_to_apply = fallback_color_mode
+                            composed = render_preview(
+                                cropped,
+                                guide_img,
+                                shirt_img,
+                                color_settings,
+                                color_mode_to_apply,
+                                config["dark_colors"],
+                                color_hex_map,
+                            )
+
+                            filename = f"{design_name}_{garment}_{color}.jpg"
+                            img_bytes = io.BytesIO()
+                            composed.save(img_bytes, format="JPEG")
+                            zip_buffer.writestr(filename, img_bytes.getvalue())
 
             output_zip.seek(0)
             st.download_button(
