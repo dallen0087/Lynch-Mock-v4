@@ -267,7 +267,7 @@ def run_app(title: str, garments: Dict[str, Dict[str, object]]):
                 active_designs.add(design_name)
 
                 st.markdown(f"### Design: `{design_name}`")
-                color_mode_key = f"{design_name}_color_mode_select}"
+                color_mode_key = f"{design_name}_color_mode_select"
                 if design_name not in st.session_state.color_mode:
                     saved_modes = [
                         settings_data.get("color_mode")
