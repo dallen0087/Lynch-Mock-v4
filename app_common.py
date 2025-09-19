@@ -279,14 +279,16 @@ def run_app(title: str, garments: Dict[str, Dict[str, object]]):
                         COLOR_MODE_OPTIONS[0],
                     )
                     st.session_state.color_mode[design_name] = initial_color_mode
-                default_color_mode = st.session_state.color_mode.get(design_name, COLOR_MODE_OPTIONS[0])
-                if default_color_mode not in COLOR_MODE_OPTIONS:
-                    default_color_mode = COLOR_MODE_OPTIONS[0]
-                    st.session_state.color_mode[design_name] = default_color_mode
-                if color_mode_key not in st.session_state:
-                    st.session_state[color_mode_key] = default_color_mode
-                elif st.session_state[color_mode_key] != default_color_mode:
-                    st.session_state[color_mode_key] = default_color_mode
+                design_color_mode = st.session_state.color_mode.get(design_name, COLOR_MODE_OPTIONS[0])
+                if design_color_mode not in COLOR_MODE_OPTIONS:
+                    design_color_mode = COLOR_MODE_OPTIONS[0]
+                    st.session_state.color_mode[design_name] = design_color_mode
+                widget_color_mode = st.session_state.get(color_mode_key)
+                if widget_color_mode in COLOR_MODE_OPTIONS:
+                    design_color_mode = widget_color_mode
+                    st.session_state.color_mode[design_name] = widget_color_mode
+                else:
+                    st.session_state[color_mode_key] = design_color_mode
                 selected_color_mode = st.selectbox(
                     "🟢Design Color Mode🟢",
                     COLOR_MODE_OPTIONS,
@@ -498,7 +500,7 @@ def run_app(title: str, garments: Dict[str, Dict[str, object]]):
                             }
                         else:
                             if "rotation" not in base_settings:
-                                base_settings["rotation"] = 0
+                                base_settings["rotation"] = 0"
                             if (
                                 "color_mode" not in base_settings
                                 or base_settings["color_mode"] not in COLOR_MODE_OPTIONS
