@@ -267,7 +267,7 @@ def run_app(title: str, garments: Dict[str, Dict[str, object]]):
                 active_designs.add(design_name)
 
                 st.markdown(f"### Design: `{design_name}`")
-                color_mode_key = f"{design_name}_color_mode_select"
+                color_mode_key = f"{design_name}_color_mode_select}"
                 if design_name not in st.session_state.color_mode:
                     saved_modes = [
                         settings_data.get("color_mode")
@@ -279,21 +279,25 @@ def run_app(title: str, garments: Dict[str, Dict[str, object]]):
                         COLOR_MODE_OPTIONS[0],
                     )
                     st.session_state.color_mode[design_name] = initial_color_mode
-                design_color_mode = st.session_state.color_mode.get(design_name, COLOR_MODE_OPTIONS[0])
-                if design_color_mode not in COLOR_MODE_OPTIONS:
-                    design_color_mode = COLOR_MODE_OPTIONS[0]
-                    st.session_state.color_mode[design_name] = design_color_mode
-                widget_color_mode = st.session_state.get(color_mode_key)
-                if widget_color_mode in COLOR_MODE_OPTIONS:
-                    design_color_mode = widget_color_mode
-                    st.session_state.color_mode[design_name] = widget_color_mode
-                else:
-                    st.session_state[color_mode_key] = design_color_mode
+                stored_color_mode = st.session_state.color_mode.get(design_name, COLOR_MODE_OPTIONS[0])
+                if stored_color_mode not in COLOR_MODE_OPTIONS:
+                    stored_color_mode = COLOR_MODE_OPTIONS[0]
+                    st.session_state.color_mode[design_name] = stored_color_mode
+                if (
+                    color_mode_key not in st.session_state
+                    or st.session_state[color_mode_key] not in COLOR_MODE_OPTIONS
+                ):
+                    st.session_state[color_mode_key] = stored_color_mode
                 selected_color_mode = st.selectbox(
                     "🟢Design Color Mode🟢",
                     COLOR_MODE_OPTIONS,
                     key=color_mode_key,
                 )
+                if selected_color_mode not in COLOR_MODE_OPTIONS:
+                    selected_color_mode = stored_color_mode
+                    st.session_state[color_mode_key] = selected_color_mode
+                else:
+                    st.session_state[color_mode_key] = selected_color_mode
                 st.session_state.color_mode[design_name] = selected_color_mode
                 design_color_mode = selected_color_mode
                 cols = st.columns(len(garments))
@@ -314,8 +318,7 @@ def run_app(title: str, garments: Dict[str, Dict[str, object]]):
                             "color_mode": design_color_mode,
                         }
                     current_settings = st.session_state.settings[combo_key]
-                    if "color_mode" not in current_settings:
-                        current_settings["color_mode"] = design_color_mode
+                    current_settings["color_mode"] = design_color_mode
                     if "rotation" not in current_settings:
                         current_settings["rotation"] = 0
                     if combo_key not in st.session_state.buffer_ui:
@@ -500,13 +503,14 @@ def run_app(title: str, garments: Dict[str, Dict[str, object]]):
                             }
                         else:
                             if "rotation" not in base_settings:
-                                base_settings["rotation"] = 0"
+                                base_settings["rotation"] = 0
                             if (
                                 "color_mode" not in base_settings
                                 or base_settings["color_mode"] not in COLOR_MODE_OPTIONS
                             ):
                                 base_settings["color_mode"] = fallback_color_mode
                         settings = base_settings.copy()
+                        settings["color_mode"] = fallback_color_mode
                         guide_name = settings.get("guide", "STANDARD")
                         asset_dir = config.get("asset_dir", garment)
                         guide_dir = config.get("guide_dir", asset_dir)
