@@ -557,7 +557,7 @@ def run_app(title: str, garments: Dict[str, Dict[str, object]]):
         st.markdown("## 📦 Export All Mockups")
         if st.button("📁 Generate and Download ZIP"):
             output_zip = io.BytesIO()
-            with zipfile.ZipFile(output_zip, "w") as zip_buffer():
+            with zipfile.ZipFile(output_zip, "w") as zip_buffer:
                 for uploaded_file in uploaded_files:
                     design_name = os.path.splitext(os.path.basename(uploaded_file.name))[0]
                     design = load_cached_design(design_name)
