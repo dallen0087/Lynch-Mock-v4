@@ -279,25 +279,26 @@ def run_app(title: str, garments: Dict[str, Dict[str, object]]):
                         COLOR_MODE_OPTIONS[0],
                     )
                     st.session_state.color_mode[design_name] = initial_color_mode
-                stored_color_mode = st.session_state.color_mode.get(design_name, COLOR_MODE_OPTIONS[0])
-                if stored_color_mode not in COLOR_MODE_OPTIONS:
-                    stored_color_mode = COLOR_MODE_OPTIONS[0]
-                    st.session_state.color_mode[design_name] = stored_color_mode
+                stored_color_mode = st.session_state.color_mode.get(
+                    design_name, COLOR_MODE_OPTIONS[0]
+                )
+                normalized_color_mode = (
+                    stored_color_mode
+                    if stored_color_mode in COLOR_MODE_OPTIONS
+                    else COLOR_MODE_OPTIONS[0]
+                )
                 if (
                     color_mode_key not in st.session_state
                     or st.session_state[color_mode_key] not in COLOR_MODE_OPTIONS
                 ):
-                    st.session_state[color_mode_key] = stored_color_mode
+                    st.session_state[color_mode_key] = normalized_color_mode
+                if normalized_color_mode != stored_color_mode:
+                    st.session_state.color_mode[design_name] = normalized_color_mode
                 selected_color_mode = st.selectbox(
                     "🟢Design Color Mode🟢",
                     COLOR_MODE_OPTIONS,
                     key=color_mode_key,
                 )
-                if selected_color_mode not in COLOR_MODE_OPTIONS:
-                    selected_color_mode = stored_color_mode
-                    st.session_state[color_mode_key] = selected_color_mode
-                else:
-                    st.session_state[color_mode_key] = selected_color_mode
                 st.session_state.color_mode[design_name] = selected_color_mode
                 design_color_mode = selected_color_mode
                 cols = st.columns(len(garments))
