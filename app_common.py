@@ -10,6 +10,14 @@ from PIL import Image, UnidentifiedImageError
 
 PREVIEW_DISPLAY_SIZE = (600, 600)
 PREVIEW_IMAGE_FORMAT = "JPEG"
+COLOR_MODE_OPTIONS = [
+    "Standard (Black/White)",
+    "Blood Red",
+    "Golden Orange",
+    "Royal Blue",
+    "Forest Green",
+    "Unchanged",
+]
 COLOR_HEX_MAP = {
     "Blood Red": "#780606",
     "Golden Orange": "#FFA500",
@@ -212,10 +220,6 @@ def run_app(title: str, garments: Dict[str, Dict[str, object]]):
     st.set_page_config(layout="wide")
     st.title(title)
 
-    color_mode = st.selectbox(
-        "🟢Design Color Mode🟢",
-        ["Standard (Black/White)", "Blood Red", "Golden Orange", "Royal Blue", "Forest Green", "Unchanged"],
-    )
     color_hex_map = COLOR_HEX_MAP
 
     uploaded_files = st.file_uploader("Upload PNG design files", type=["png"], accept_multiple_files=True)
@@ -232,6 +236,8 @@ def run_app(title: str, garments: Dict[str, Dict[str, object]]):
         st.session_state.has_rendered_once = {}
     if "design_cache" not in st.session_state:
         st.session_state.design_cache = {}
+    if "color_mode" not in st.session_state:
+        st.session_state.color_mode = {}
 
     if uploaded_files:
         if not os.path.exists("temp_designs"):
@@ -261,6 +267,33 @@ def run_app(title: str, garments: Dict[str, Dict[str, object]]):
                 active_designs.add(design_name)
 
                 st.markdown(f"### Design: `{design_name}`")
+                color_mode_key = f"{design_name}_color_mode_select"
+                if design_name not in st.session_state.color_mode:
+                    saved_modes = [
+                        settings_data.get("color_mode")
+                        for combo_key, settings_data in st.session_state.settings.items()
+                        if combo_key.startswith(f"{design_name}_")
+                    ]
+                    initial_color_mode = next(
+                        (mode for mode in saved_modes if mode in COLOR_MODE_OPTIONS),
+                        COLOR_MODE_OPTIONS[0],
+                    )
+                    st.session_state.color_mode[design_name] = initial_color_mode
+                default_color_mode = st.session_state.color_mode.get(design_name, COLOR_MODE_OPTIONS[0])
+                if default_color_mode not in COLOR_MODE_OPTIONS:
+                    default_color_mode = COLOR_MODE_OPTIONS[0]
+                    st.session_state.color_mode[design_name] = default_color_mode
+                if color_mode_key not in st.session_state:
+                    st.session_state[color_mode_key] = default_color_mode
+                elif st.session_state[color_mode_key] != default_color_mode:
+                    st.session_state[color_mode_key] = default_color_mode
+                selected_color_mode = st.selectbox(
+                    "🟢Design Color Mode🟢",
+                    COLOR_MODE_OPTIONS,
+                    key=color_mode_key,
+                )
+                st.session_state.color_mode[design_name] = selected_color_mode
+                design_color_mode = selected_color_mode
                 cols = st.columns(len(garments))
                 col_idx = 0
 
@@ -276,8 +309,11 @@ def run_app(title: str, garments: Dict[str, Dict[str, object]]):
                             "guide": "STANDARD",
                             "preview": config["preview"],
                             "rotation": 0,
+                            "color_mode": design_color_mode,
                         }
                     current_settings = st.session_state.settings[combo_key]
+                    if "color_mode" not in current_settings:
+                        current_settings["color_mode"] = design_color_mode
                     if "rotation" not in current_settings:
                         current_settings["rotation"] = 0
                     if combo_key not in st.session_state.buffer_ui:
@@ -286,12 +322,19 @@ def run_app(title: str, garments: Dict[str, Dict[str, object]]):
                         guide_img = load_guide_image(guide_dir, current_settings["guide"])
                         shirt_img = load_shirt_image(asset_dir, current_settings["preview"])
                         preview_image = render_preview(
-                            cropped, guide_img, shirt_img, current_settings, color_mode, config["dark_colors"], color_hex_map
+                            cropped,
+                            guide_img,
+                            shirt_img,
+                            current_settings,
+                            current_settings.get("color_mode", design_color_mode),
+                            config["dark_colors"],
+                            color_hex_map,
                         )
                         st.session_state.previews[combo_key] = preview_to_bytes(preview_image)
                         st.session_state.has_rendered_once[combo_key] = True
 
                     buf = st.session_state.buffer_ui[combo_key]
+                    buf["color_mode"] = design_color_mode
                     if "rotation" not in buf:
                         buf["rotation"] = current_settings.get("rotation", 0)
                     with st.expander(f"{display_name} Settings for `{design_name}`", expanded=False):
@@ -328,9 +371,16 @@ def run_app(title: str, garments: Dict[str, Dict[str, object]]):
                                     copied_values = st.session_state.copied_settings[garment]
                                     if "rotation" not in copied_values:
                                         copied_values["rotation"] = 0
+                                    copied_color_mode = copied_values.get("color_mode", design_color_mode)
+                                    if copied_color_mode not in COLOR_MODE_OPTIONS:
+                                        copied_color_mode = design_color_mode
+                                    copied_values["color_mode"] = copied_color_mode
                                     for uf2 in uploaded_files:
-                                        other_key = f"{os.path.splitext(os.path.basename(uf2.name))[0]}_{garment}"
+                                        other_design_name = os.path.splitext(os.path.basename(uf2.name))[0]
+                                        other_key = f"{other_design_name}_{garment}"
                                         st.session_state.buffer_ui[other_key] = copied_values.copy()
+                                        st.session_state.color_mode[other_design_name] = copied_color_mode
+                                        st.session_state[f"{other_design_name}_color_mode_select"] = copied_color_mode
                                     st.success("Pasted settings")
 
                         if st.button(f"🔁 Refresh {display_name} Preview", key=f"{combo_key}_refresh"):
@@ -339,7 +389,13 @@ def run_app(title: str, garments: Dict[str, Dict[str, object]]):
                             preview_color = buf.get("preview", config["preview"])
                             shirt_img = load_shirt_image(asset_dir, preview_color)
                             preview_image = render_preview(
-                                cropped, guide_img, shirt_img, buf, color_mode, config["dark_colors"], color_hex_map
+                                cropped,
+                                guide_img,
+                                shirt_img,
+                                buf,
+                                buf.get("color_mode", design_color_mode),
+                                config["dark_colors"],
+                                color_hex_map,
                             )
                             st.session_state.previews[combo_key] = preview_to_bytes(preview_image)
 
@@ -362,8 +418,16 @@ def run_app(title: str, garments: Dict[str, Dict[str, object]]):
                     buf["rotation"] = settings_snapshot.get("rotation", 0)
                 if "rotation" not in settings_snapshot:
                     settings_snapshot["rotation"] = buf["rotation"]
+                design_name, garment = combo_key.rsplit("_", 1)
+                design_color_mode = st.session_state.color_mode.get(design_name, COLOR_MODE_OPTIONS[0])
+                if design_color_mode not in COLOR_MODE_OPTIONS:
+                    design_color_mode = COLOR_MODE_OPTIONS[0]
+                buf_color_mode = buf.get("color_mode", design_color_mode)
+                if buf_color_mode not in COLOR_MODE_OPTIONS:
+                    buf_color_mode = design_color_mode
+                buf["color_mode"] = buf_color_mode
+                st.session_state.color_mode[design_name] = buf_color_mode
                 if buf != settings_snapshot:
-                    design_name, garment = combo_key.rsplit("_", 1)
                     config = garments.get(garment)
                     if config is None:
                         continue
@@ -385,7 +449,13 @@ def run_app(title: str, garments: Dict[str, Dict[str, object]]):
                     preview_color = buf.get("preview", config["preview"])
                     shirt_img = load_shirt_image(asset_dir, preview_color)
                     preview_image = render_preview(
-                        cropped, guide_img, shirt_img, buf, color_mode, config["dark_colors"], color_hex_map
+                        cropped,
+                        guide_img,
+                        shirt_img,
+                        buf,
+                        buf_color_mode,
+                        config["dark_colors"],
+                        color_hex_map,
                     )
                     st.session_state.previews[combo_key] = preview_to_bytes(preview_image)
                     st.session_state.settings[combo_key] = buf.copy()
@@ -409,6 +479,10 @@ def run_app(title: str, garments: Dict[str, Dict[str, object]]):
                         st.warning(f"Skipping '{uploaded_file.name}' because it has no visible content to render.")
                         continue
                     cropped = design.crop(bbox)
+                    fallback_color_mode = st.session_state.color_mode.get(design_name, COLOR_MODE_OPTIONS[0])
+                    if fallback_color_mode not in COLOR_MODE_OPTIONS:
+                        fallback_color_mode = COLOR_MODE_OPTIONS[0]
+                        st.session_state.color_mode[design_name] = fallback_color_mode
 
                     for garment, config in garments.items():
                         combo_key = f"{design_name}_{garment}"
@@ -420,10 +494,16 @@ def run_app(title: str, garments: Dict[str, Dict[str, object]]):
                                 "guide": "STANDARD",
                                 "preview": config["preview"],
                                 "rotation": 0,
+                                "color_mode": fallback_color_mode,
                             }
                         else:
                             if "rotation" not in base_settings:
                                 base_settings["rotation"] = 0
+                            if (
+                                "color_mode" not in base_settings
+                                or base_settings["color_mode"] not in COLOR_MODE_OPTIONS
+                            ):
+                                base_settings["color_mode"] = fallback_color_mode
                         settings = base_settings.copy()
                         guide_name = settings.get("guide", "STANDARD")
                         asset_dir = config.get("asset_dir", garment)
@@ -441,8 +521,17 @@ def run_app(title: str, garments: Dict[str, Dict[str, object]]):
                             shirt_img = load_shirt_image(asset_dir, color)
                             color_settings = settings.copy()
                             color_settings["preview"] = color
+                            color_mode_to_apply = color_settings.get("color_mode", fallback_color_mode)
+                            if color_mode_to_apply not in COLOR_MODE_OPTIONS:
+                                color_mode_to_apply = fallback_color_mode
                             composed = render_preview(
-                                cropped, guide_img, shirt_img, color_settings, color_mode, config["dark_colors"], color_hex_map
+                                cropped,
+                                guide_img,
+                                shirt_img,
+                                color_settings,
+                                color_mode_to_apply,
+                                config["dark_colors"],
+                                color_hex_map,
                             )
 
                             filename = f"{design_name}_{garment}_{color}.jpg"
@@ -461,3 +550,5 @@ def run_app(title: str, garments: Dict[str, Dict[str, object]]):
         stale_designs = set(st.session_state.design_cache.keys()) - active_designs
         for stale in stale_designs:
             st.session_state.design_cache.pop(stale, None)
+            st.session_state.color_mode.pop(stale, None)
+            st.session_state.pop(f"{stale}_color_mode_select", None)
