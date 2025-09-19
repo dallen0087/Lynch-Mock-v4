@@ -301,11 +301,17 @@ def run_app(title: str, garments: Dict[str, Dict[str, object]]):
                         buf["scale"] = st.slider("Scale (%)", 50, 100, buf["scale"], key=f"{combo_key}_scale")
                         buf["offset"] = st.slider("Offset (px)", -100, 100, buf["offset"], key=f"{combo_key}_offset")
                         if config.get("allow_rotation"):
+                            rotation_value = float(buf.get("rotation", 0))
+                            if rotation_value < -10:
+                                rotation_value = -10.0
+                            elif rotation_value > 10:
+                                rotation_value = 10.0
                             buf["rotation"] = st.slider(
                                 "Rotation (°)",
-                                -30,
-                                30,
-                                buf["rotation"],
+                                -10.0,
+                                10.0,
+                                rotation_value,
+                                0.5,
                                 key=f"{combo_key}_rotation",
                             )
 
