@@ -168,11 +168,18 @@ def render_preview(cropped, guide_img, shirt_img, settings, color_mode, dark_col
     alpha = np.array(guide_img.split()[-1])
     mask = alpha < 10
     ys, xs = np.where(mask)
-    box_x0, box_y0, box_x1, box_y1 = xs.min(), ys.min(), xs.max(), ys.max()
-    box_w, box_h = box_x1 - box_x0, box_y1 - box_y0
+    if xs.size == 0 or ys.size == 0:
+        box_x0, box_y0 = 0, 0
+        box_x1, box_y1 = guide_img.width, guide_img.height
+    else:
+        box_x0, box_y0 = int(xs.min()), int(ys.min())
+        box_x1, box_y1 = int(xs.max()), int(ys.max())
+    box_w = max(1, box_x1 - box_x0)
+    box_h = max(1, box_y1 - box_y0)
 
-    target_w = int(box_w * (settings["scale"] / 100))
-    target_h = int(box_h * (settings["scale"] / 100))
+    scale_factor = settings["scale"] / 100
+    target_w = max(1, int(box_w * scale_factor))
+    target_h = max(1, int(box_h * scale_factor))
     aspect = cropped.width / cropped.height
     if aspect > (target_w / target_h):
         new_w, new_h = target_w, int(target_w / aspect)
