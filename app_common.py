@@ -164,6 +164,19 @@ def remove_prefixed_keys(state_dict, prefix: str) -> list[str]:
     return matched
 
 
+def list_available_guides(guide_folder: str) -> list[str]:
+    if not os.path.isdir(guide_folder):
+        return []
+    try:
+        return sorted(
+            f.rsplit(".", 1)[0]
+            for f in os.listdir(guide_folder)
+            if f.endswith(".png")
+        )
+    except FileNotFoundError:
+        return []
+
+
 def render_preview(cropped, guide_img, shirt_img, settings, color_mode, dark_colors, hex_map):
     alpha = np.array(guide_img.split()[-1])
     mask = alpha < 10
@@ -400,8 +413,32 @@ def run_app(title: str, garments: Dict[str, Dict[str, object]]):
                         buf["opacity"] = current_settings.get("opacity", 95)
                     with st.expander(f"{display_name} Settings for `{design_name}`", expanded=False):
                         guide_folder = os.path.join("assets", "guides", guide_dir)
-                        guides = sorted([f.split(".")[0] for f in os.listdir(guide_folder) if f.endswith(".png")])
-                        buf["guide"] = st.selectbox("Guide", guides, index=guides.index(buf["guide"]), key=f"{combo_key}_guide")
+                        guides = list_available_guides(guide_folder)
+                        preferred_guide = (
+                            buf.get("guide")
+                            or current_settings.get("guide")
+                            or "STANDARD"
+                        )
+                        if not guides:
+                            guides = [preferred_guide]
+                        elif preferred_guide and preferred_guide not in guides:
+                            guides = [preferred_guide, *guides]
+
+                        target_guide = buf.get("guide") or preferred_guide
+                        if target_guide in guides:
+                            guide_index = guides.index(target_guide)
+                        else:
+                            guide_index = 0
+                            if target_guide:
+                                st.warning(
+                                    f"Guide '{target_guide}' is unavailable. Defaulted to '{guides[0]}'."
+                                )
+                        buf["guide"] = st.selectbox(
+                            "Guide",
+                            guides,
+                            index=guide_index,
+                            key=f"{combo_key}_guide",
+                        )
                         buf["scale"] = st.slider("Scale (%)", 50, 100, buf["scale"], key=f"{combo_key}_scale")
                         buf["offset"] = st.slider("Offset (px)", -100, 100, buf["offset"], key=f"{combo_key}_offset")
                         opacity_default = buf.get("opacity", 95)
