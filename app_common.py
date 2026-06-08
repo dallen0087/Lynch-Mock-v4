@@ -115,6 +115,25 @@ GARMENTS_ALL: Dict[str, Dict[str, object]] = {
     },
 }
 
+GARMENTS_BASEBALL = {
+    "baseballs": {
+        "preview": "WHITE_BLACK_MODEL",
+        "colors": [
+            "BLACK_WHITE_MODEL",
+            "WHITE_BLACK_MODEL",
+            "WHITE_GREEN_MODEL",
+            "WHITE_RED_MODEL",
+            "WHITE_NAVY_MODEL",
+        ],
+        "dark_colors": ["BLACK_WHITE_MODEL"],
+        "asset_dir": "BASEBALL",
+        "guide_dir": "BASEBALL",
+        "default_guide": "STANDARD",
+        "display_name": "Baseballs",
+        "allow_rotation": True,
+    },
+}
+
 FLAT_GARMENT_KEYS = ["tshirts", "hoodies", "sweatshirts", "ringer_tees"]
 MODEL_GARMENT_KEYS = ["model_t1", "model_t2", "model_h1", "model_h2", "model_ss1", "model_ss2"]
 
